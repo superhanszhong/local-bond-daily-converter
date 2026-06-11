@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>地方债日表转换器</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #5e6c7b;
+      --line: #d9e0e7;
+      --paper: #f6f8fa;
+      --panel: #ffffff;
+      --accent: #116d6e;
+      --blue: #315f96;
+      --copper: #b3532b;
+      --ok: #1f8a55;
+      --bad: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        linear-gradient(90deg, rgba(17,109,110,.08), transparent 46%),
+        linear-gradient(180deg, #ffffff 0%, var(--paper) 72%);
+    }
+    .shell {
+      width: min(1120px, calc(100vw - 40px));
+      margin: 0 auto;
+      padding: 32px 0 28px;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1 {
+      margin: 0;
+      font-size: clamp(28px, 4vw, 46px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+    .sub {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 15px;
+      line-height: 1.5;
+      max-width: 720px;
+    }
+    .date {
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    main {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(280px, .75fr);
+      gap: 22px;
+      margin-top: 24px;
+      align-items: start;
+    }
+    .dropzone {
+      min-height: 420px;
+      border: 2px dashed #93a2b2;
+      border-radius: 8px;
+      background: var(--panel);
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      transition: border-color .16s ease, box-shadow .16s ease, transform .16s ease;
+    }
+    .dropzone.drag {
+      border-color: var(--accent);
+      box-shadow: 0 16px 42px rgba(17,109,110,.16);
+      transform: translateY(-1px);
+    }
+    .drop-inner {
+      width: min(560px, 100%);
+      text-align: center;
+    }
+    .file-mark {
+      width: 92px;
+      height: 116px;
+      margin: 0 auto 22px;
+      border: 2px solid var(--blue);
+      border-radius: 6px;
+      position: relative;
+      background: linear-gradient(180deg, #ffffff, #edf5fb);
+    }
+    .file-mark::before {
+      content: "";
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      border-left: 28px solid transparent;
+      border-bottom: 28px solid #d7e7f5;
+      width: 0;
+      height: 0;
+    }
+    .file-mark::after {
+      content: "XLSX";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 24px;
+      color: var(--accent);
+      font-weight: 800;
+      font-size: 18px;
+    }
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 6px;
+      background: var(--accent);
+      color: white;
+      font-weight: 700;
+      font-size: 16px;
+      padding: 12px 18px;
+      cursor: pointer;
+      min-width: 150px;
+    }
+    button:disabled {
+      cursor: wait;
+      opacity: .65;
+    }
+    input[type="file"] { display: none; }
+    .filename {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 15px;
+      word-break: break-all;
+    }
+    .status {
+      margin-top: 18px;
+      min-height: 28px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+    .status.ok { color: var(--ok); }
+    .status.bad { color: var(--bad); }
+    .status.work { color: var(--copper); }
+    .side { display: grid; gap: 14px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+    .metric {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr);
+      gap: 8px 12px;
+      font-size: 14px;
+      color: var(--muted);
+    }
+    .metric strong {
+      color: var(--ink);
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+    .step {
+      min-height: 76px;
+      border-left: 4px solid var(--blue);
+      background: #f5f8fb;
+      padding: 12px 10px;
+    }
+    .step:nth-child(2) { border-left-color: var(--accent); }
+    .step:nth-child(3) { border-left-color: var(--copper); }
+    .step b {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+    .step span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    @media (max-width: 820px) {
+      .shell { width: min(100vw - 24px, 680px); padding-top: 20px; }
+      header { display: block; }
+      .date { margin-top: 10px; white-space: normal; }
+      main { grid-template-columns: 1fr; }
+      .dropzone { min-height: 360px; }
+      .flow { grid-template-columns: 1fr; }
+      .metric { grid-template-columns: 88px minmax(0, 1fr); }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div>
+        <h1>地方债日表转换器</h1>
+        <div class="sub">拖入 DM 下载的地方政府债 Excel，浏览器会在本地生成每日地方债发行计划，不上传原始文件。</div>
+      </div>
+      <div class="date" id="today"></div>
+    </header>
+    <main>
+      <section class="dropzone" id="dropzone">
+        <div class="drop-inner">
+          <div class="file-mark" aria-hidden="true"></div>
+          <input id="fileInput" type="file" accept=".xlsx,.xlsm" />
+          <button id="pickButton" type="button">选择 Excel</button>
+          <div class="filename" id="filename">把“地方政府债+日期.xlsx”拖到这里</div>
+          <div class="status" id="status"></div>
+        </div>
+      </section>
+      <aside class="side">
+        <section class="panel">
+          <h2>转换状态</h2>
+          <div class="metric">
+            <span>输入文件</span><strong id="mFile">等待选择</strong>
+            <span>输出格式</span><strong>每日地方债发行计划</strong>
+            <span>处理方式</span><strong>浏览器本地转换</strong>
+          </div>
+        </section>
+        <section class="panel">
+          <h2>处理流程</h2>
+          <div class="flow">
+            <div class="step"><b>读取</b><span>识别 DM 原始字段</span></div>
+            <div class="step"><b>生成</b><span>写入日表公式和版式</span></div>
+            <div class="step"><b>下载</b><span>保存新的 xlsx 文件</span></div>
+          </div>
+        </section>
+      </aside>
+    </main>
+  </div>
+
+  <script>
+    const HEADERS = [
+      "发行场所", "发行时间", "债类型", "分销日", "代码", "简称", "期限", "发行量",
+      "发行量35%", "发行量\n-35%-35%", "发行量16%", "国债差", "下限", "相似收盘",
+      "+10bp", "投标", "国债基准", "手续费", "参考综收", "参考久期"
+    ];
+    const VENUE_MAP = {
+      "深圳证券交易所": "深交所",
+      "上海证券交易所": "上交所",
+      "中央国债登记结算有限责任公司": "中债登"
+    };
+    const REQUIRED = [
+      "招标日", "招标时间", "招标场所", "债券代码", "债券简称", "类型", "性质", "期限",
+      "参考久期", "发行量(亿元)", "相似二级估值", "手续费(%)", "中债5日均值(%)",
+      "加点(bp)", "缴款日", "债券全称"
+    ];
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("fileInput");
+    const pickButton = document.getElementById("pickButton");
+    const filename = document.getElementById("filename");
+    const status = document.getElementById("status");
+    const metricFile = document.getElementById("mFile");
+
+    document.getElementById("today").textContent = new Intl.DateTimeFormat("zh-CN", {
+      year: "numeric", month: "long", day: "numeric", weekday: "long"
+    }).format(new Date());
+
+    function setStatus(text, cls = "") {
+      status.className = "status " + cls;
+      status.textContent = text;
+    }
+
+    function cleanValue(value) {
+      return value === undefined || value === null || value === "" || value === "--" ? null : value;
+    }
+
+    function toFloat(value) {
+      value = cleanValue(value);
+      if (value === null) return null;
+      const n = Number(value);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function excelDateToJSDate(serial) {
+      const utcDays = Math.floor(serial - 25569);
+      const utcValue = utcDays * 86400;
+      const dateInfo = new Date(utcValue * 1000);
+      const fractionalDay = serial - Math.floor(serial) + 0.0000001;
+      let totalSeconds = Math.floor(86400 * fractionalDay);
+      const seconds = totalSeconds % 60;
+      totalSeconds -= seconds;
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor(totalSeconds / 60) % 60;
+      return new Date(dateInfo.getFullYear(), dateInfo.getMonth(), dateInfo.getDate(), hours, minutes, seconds);
+    }
+
+    function toDate(value) {
+      value = cleanValue(value);
+      if (value === null) return null;
+      if (value instanceof Date) return value;
+      if (typeof value === "number") return excelDateToJSDate(value);
+      const text = String(value).slice(0, 10);
+      const parts = text.split("-").map(Number);
+      if (parts.length === 3 && parts.every(Number.isFinite)) {
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+      }
+      return null;
+    }
+
+    function issueCode(value) {
+      value = cleanValue(value);
+      if (value === null) return null;
+      const text = String(value).trim().replace(/\.IB$/i, "");
+      return /^\d+$/.test(text) ? Number(text) : text;
+    }
+
+    function tenorYears(value) {
+      value = cleanValue(value);
+      if (value === null) return null;
+      const match = String(value).toUpperCase().match(/(\d+(?:\.\d+)?)/);
+      if (!match) return null;
+      const years = Number(match[1]);
+      return Number.isInteger(years) ? years : years;
+    }
+
+    function shortVenue(value) {
+      value = cleanValue(value);
+      if (value === null) return null;
+      const text = String(value).trim();
+      return VENUE_MAP[text] || text;
+    }
+
+    function cleanBondType(fullName, fallbackType, nature, region) {
+      let text = String(cleanValue(fullName) || "").trim();
+      if (!text) {
+        return [cleanValue(nature), cleanValue(fallbackType)].filter(Boolean).join("") + "债";
+      }
+      const regionText = String(cleanValue(region) || "").trim();
+      text = text.replace(/^\d{4}年/, "");
+      return text.split("-").map((seg) => {
+        seg = seg.replace(/^\d{4}年/, "");
+        if (regionText) {
+          seg = seg.replace(new RegExp("^" + escapeRegExp(regionText) + "(省|市|自治区)?"), "");
+        }
+        return seg
+          .replace(/地方政府/g, "")
+          .replace(/政府/g, "")
+          .replace(/债券/g, "债")
+          .trim();
+      }).filter(Boolean).join("-");
+    }
+
+    function escapeRegExp(text) {
+      return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function cell(v, extra = {}) {
+      const out = { v, ...extra };
+      if (v instanceof Date) out.t = "d";
+      return out;
+    }
+
+    function formula(f) {
+      return { f };
+    }
+
+    function encodeCell(row, col) {
+      return XLSX.utils.encode_cell({ r: row - 1, c: col - 1 });
+    }
+
+    function set(ws, row, col, value) {
+      const address = encodeCell(row, col);
+      ws[address] = value && typeof value === "object" && ("v" in value || "f" in value) ? value : cell(value);
+    }
+
+    function applyStyles(ws, maxRow, maxCol) {
+      const border = {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      };
+      const base = {
+        font: { name: "宋体", sz: 14, bold: true },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+        border
+      };
+      const head = {
+        font: { name: "宋体", sz: 20, bold: true },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+        border
+      };
+      for (let r = 1; r <= maxRow; r++) {
+        for (let c = 1; c <= maxCol; c++) {
+          const addr = encodeCell(r, c);
+          if (!ws[addr]) ws[addr] = cell(null);
+          ws[addr].s = r <= 2 ? head : base;
+        }
+      }
+      for (let r = 3; r <= maxRow; r++) {
+        const dateCell = ws[encodeCell(r, 4)];
+        if (dateCell) dateCell.z = "m/d;@";
+        [8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20].forEach((c) => {
+          const target = ws[encodeCell(r, c)];
+          if (target) target.z = "0.00";
+        });
+      }
+    }
+
+    function readRecords(workbook) {
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
+      const headers = rows[1] || [];
+      const index = {};
+      headers.forEach((h, i) => {
+        if (h !== null && h !== undefined && String(h).trim()) index[String(h).trim()] = i;
+      });
+      const missing = REQUIRED.filter((name) => !(name in index));
+      if (missing.length) throw new Error("源文件缺少必要列：" + missing.join("、"));
+
+      const records = [];
+      let bidDate = null;
+      for (let r = 2; r < rows.length; r++) {
+        const row = rows[r];
+        if (!cleanValue(row[index["债券代码"]])) continue;
+        const rec = {};
+        Object.entries(index).forEach(([name, col]) => rec[name] = row[col]);
+        bidDate = bidDate || toDate(rec["招标日"]);
+        records.push(rec);
+      }
+      if (!records.length) throw new Error("源文件未读取到有效债券明细");
+      return { records, bidDate };
+    }
+
+    function buildWorkbook(records, bidDate) {
+      const wb = XLSX.utils.book_new();
+      const ws = {};
+      const firstDataRow = 3;
+      const lastDataRow = firstDataRow + records.length - 1;
+      const totalRow = lastDataRow + 1;
+      const noteRow = totalRow + 1;
+      const textStart = noteRow + 1;
+      const maxRow = textStart + records.length - 1;
+      const maxCol = 20;
+
+      const title = bidDate ? `${bidDate.getMonth() + 1}月${bidDate.getDate()}日地方债发行计划` : "地方债发行计划";
+      set(ws, 1, 1, title);
+      HEADERS.forEach((h, i) => set(ws, 2, i + 1, h));
+
+      records.forEach((rec, offset) => {
+        const row = firstDataRow + offset;
+        set(ws, row, 1, shortVenue(rec["招标场所"]));
+        set(ws, row, 2, cleanValue(rec["招标时间"]));
+        set(ws, row, 3, cleanBondType(rec["债券全称"], rec["类型"], rec["性质"], rec["区域名称"]));
+        set(ws, row, 4, toDate(rec["缴款日"]));
+        set(ws, row, 5, issueCode(rec["债券代码"]));
+        set(ws, row, 6, cleanValue(rec["债券简称"]));
+        set(ws, row, 7, tenorYears(rec["期限"]));
+        set(ws, row, 8, toFloat(rec["发行量(亿元)"]));
+        set(ws, row, 9, formula(`ROUND(H${row}*0.35,1)`));
+        set(ws, row, 10, formula(`ROUNDDOWN(H${row}-I${row}-I${row},1)`));
+        set(ws, row, 11, formula(`ROUNDDOWN(H${row}*0.16,1)`));
+        set(ws, row, 12, (toFloat(rec["加点(bp)"]) || 0) / 100);
+        set(ws, row, 13, formula(`Q${row}+L${row}`));
+        set(ws, row, 14, toFloat(rec["相似二级估值"]));
+        set(ws, row, 15, formula(`0.1+N${row}`));
+        set(ws, row, 17, toFloat(rec["中债5日均值(%)"]));
+        set(ws, row, 18, toFloat(rec["手续费(%)"]));
+        set(ws, row, 19, formula(`R${row}/T${row}+M${row}`));
+        set(ws, row, 20, toFloat(rec["参考久期"]));
+      });
+
+      set(ws, totalRow, 7, "合计");
+      set(ws, totalRow, 8, formula(`SUM(H${firstDataRow}:H${lastDataRow})`));
+      set(ws, totalRow, 9, formula(`SUM(I${firstDataRow}:I${lastDataRow})`));
+      set(ws, totalRow, 10, formula(`SUM(J${firstDataRow}:J${lastDataRow})`));
+      set(ws, noteRow, 9, "青岛 上海 北京 浙江 西藏 是30%  江苏 宁波25%，其他都是35%");
+
+      for (let dataRow = firstDataRow; dataRow <= lastDataRow; dataRow++) {
+        const row = textStart + (dataRow - firstDataRow);
+        set(ws, row, 1, formula(`F${dataRow}&"，"&G${dataRow}&"Y，"&H${dataRow}&"亿，下限(国债基准"&ROUND(Q${dataRow},2)&"+"&RIGHT(L${dataRow}*100,2)&"bp)="&ROUND(M${dataRow},2)&"，"&MONTH(D${dataRow})&"月"&DAY(D${dataRow})&"日"&"分销，手续费"&R${dataRow}`));
+        set(ws, row, 5, formula(`"【"&C${dataRow}&"】"`));
+        set(ws, row, 8, formula(`M${dataRow}`));
+        set(ws, row, 9, formula(`F${dataRow}&","&G${dataRow}&"Y，"&H${dataRow}&"亿, "&H${row}&"%"&",国债基准+"&ROUND(H${row}-R${dataRow},2)*100&"bp"`));
+        set(ws, row, 14, formula(`E${row}&A${row}`));
+      }
+
+      const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 19 } }];
+      let groupStart = firstDataRow;
+      while (groupStart <= lastDataRow) {
+        const key = `${ws[encodeCell(groupStart, 1)]?.v || ""}||${ws[encodeCell(groupStart, 2)]?.v || ""}`;
+        let groupEnd = groupStart;
+        while (groupEnd + 1 <= lastDataRow) {
+          const nextKey = `${ws[encodeCell(groupEnd + 1, 1)]?.v || ""}||${ws[encodeCell(groupEnd + 1, 2)]?.v || ""}`;
+          if (nextKey !== key) break;
+          groupEnd++;
+        }
+        if (groupEnd > groupStart) {
+          merges.push({ s: { r: groupStart - 1, c: 0 }, e: { r: groupEnd - 1, c: 0 } });
+          merges.push({ s: { r: groupStart - 1, c: 1 }, e: { r: groupEnd - 1, c: 1 } });
+          for (let r = groupStart + 1; r <= groupEnd; r++) {
+            delete ws[encodeCell(r, 1)];
+            delete ws[encodeCell(r, 2)];
+          }
+        }
+        groupStart = groupEnd + 1;
+      }
+
+      ws["!ref"] = `A1:T${maxRow}`;
+      ws["!merges"] = merges;
+      ws["!cols"] = [
+        18.5, 24.6, 62, 18.6, 27.5, 34.6, 12, 16, 16, 18,
+        16, 12, 12, 14, 12, 12, 14, 12, 14, 14
+      ].map((wch) => ({ wch }));
+      ws["!rows"] = Array.from({ length: maxRow }, (_, i) => ({ hpt: i === 0 ? 38 : i === 1 ? 54 : 30 }));
+      applyStyles(ws, maxRow, maxCol);
+      XLSX.utils.book_append_sheet(wb, ws, "3.21模版");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([[]]), "Sheet1");
+      return wb;
+    }
+
+    async function convert(file) {
+      if (!file) return;
+      if (!window.XLSX) {
+        setStatus("Excel 组件未加载，请刷新页面后重试。", "bad");
+        return;
+      }
+      filename.textContent = file.name;
+      metricFile.textContent = file.name;
+      setStatus("正在转换...", "work");
+      pickButton.disabled = true;
+      try {
+        const buffer = await file.arrayBuffer();
+        const sourceWorkbook = XLSX.read(buffer, { type: "array", cellDates: true });
+        const { records, bidDate } = readRecords(sourceWorkbook);
+        const outputWorkbook = buildWorkbook(records, bidDate);
+        const datePart = bidDate
+          ? `${bidDate.getFullYear()}${String(bidDate.getMonth() + 1).padStart(2, "0")}${String(bidDate.getDate()).padStart(2, "0")}`
+          : "未识别日期";
+        XLSX.writeFile(outputWorkbook, `每日地方债发行计划_${datePart}.xlsx`, { bookType: "xlsx" });
+        setStatus("已生成并开始下载", "ok");
+      } catch (error) {
+        setStatus(error.message || String(error), "bad");
+      } finally {
+        pickButton.disabled = false;
+      }
+    }
+
+    pickButton.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => convert(fileInput.files[0]));
+    ["dragenter", "dragover"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropzone.classList.add("drag");
+      });
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+      dropzone.addEventListener(eventName, (event) => {
+        event.preventDefault();
+        dropzone.classList.remove("drag");
+      });
+    });
+    dropzone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      convert(event.dataTransfer.files[0]);
+    });
+  </script>
+</body>
+</html>
