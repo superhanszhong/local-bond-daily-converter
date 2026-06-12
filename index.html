@@ -369,23 +369,24 @@
         border: titleBorder
       };
       const fills = {
-        spread: { patternType: "solid", fgColor: { rgb: "C6E0B4" } },
+        common: { patternType: "solid", fgColor: { rgb: "C6E0B4" } },
+        different: { patternType: "solid", fgColor: { rgb: "FFFF00" } },
         floor: { patternType: "solid", fgColor: { rgb: "DDEBF7" } },
-        fee: { patternType: "solid", fgColor: { rgb: "FFFF00" } }
       };
       for (let r = 1; r <= maxRow; r++) {
         for (let c = 1; c <= maxCol; c++) {
           const addr = encodeCell(r, c);
           if (!ws[addr]) ws[addr] = cell(null);
           ws[addr].s = cloneStyle(r === 1 ? title : r < textStart ? main : text);
-          if (r >= 2 && c === 12) ws[addr].s.fill = cloneStyle(fills.spread);
           if (r >= 2 && c === 13) ws[addr].s.fill = cloneStyle(fills.floor);
-          if (r >= 2 && c === 18) ws[addr].s.fill = cloneStyle(fills.fee);
+          if (r === 2 && (c === 12 || c === 18)) ws[addr].s.fill = cloneStyle(fills.common);
           if (r >= 3 && r <= lastDataRow && (c === 12 || c === 18)) {
             ws[addr].s.font = { name: "宋体", sz: 20, bold: true, italic: true, underline: true };
           }
         }
       }
+      applyValueHighlight(ws, 12, 3, lastDataRow, fills.common, fills.different);
+      applyValueHighlight(ws, 18, 3, lastDataRow, fills.common, fills.different);
       for (let r = 3; r <= maxRow; r++) {
         const dateCell = ws[encodeCell(r, 4)];
         if (dateCell) dateCell.z = "yyyy-mm-dd";
@@ -411,6 +412,35 @@
 
     function cloneStyle(style) {
       return JSON.parse(JSON.stringify(style));
+    }
+
+    function applyValueHighlight(ws, col, firstRow, lastRow, commonFill, differentFill) {
+      const counts = new Map();
+      for (let r = firstRow; r <= lastRow; r++) {
+        const key = valueKey(ws[encodeCell(r, col)]?.v);
+        if (!key) continue;
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      let commonKey = "";
+      let commonCount = -1;
+      counts.forEach((count, key) => {
+        if (count > commonCount) {
+          commonKey = key;
+          commonCount = count;
+        }
+      });
+      for (let r = firstRow; r <= lastRow; r++) {
+        const addr = encodeCell(r, col);
+        const key = valueKey(ws[addr]?.v);
+        if (!key) continue;
+        ws[addr].s.fill = cloneStyle(key === commonKey ? commonFill : differentFill);
+      }
+    }
+
+    function valueKey(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return "";
+      return String(Math.round(n * 10000) / 10000);
     }
 
     function readRecords(workbook) {
