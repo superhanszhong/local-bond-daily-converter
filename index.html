@@ -483,11 +483,25 @@
         if (!cleanValue(row[index["债券代码"]])) continue;
         const rec = {};
         Object.entries(index).forEach(([name, col]) => rec[name] = row[col]);
+        rec.__sourceOrder = r;
         bidDate = bidDate || toDate(rec["招标日"]);
         records.push(rec);
       }
       if (!records.length) throw new Error("源文件未读取到有效债券明细");
+      records.sort((a, b) => {
+        const timeDiff = bidTimeKey(a["招标时间"]) - bidTimeKey(b["招标时间"]);
+        return timeDiff || a.__sourceOrder - b.__sourceOrder;
+      });
       return { records, bidDate };
+    }
+
+    function bidTimeKey(value) {
+      value = cleanValue(value);
+      if (value === null) return Number.MAX_SAFE_INTEGER;
+      const text = String(value);
+      const match = text.match(/(\d{1,2})\s*:\s*(\d{2})/);
+      if (!match) return Number.MAX_SAFE_INTEGER;
+      return Number(match[1]) * 60 + Number(match[2]);
     }
 
     function buildWorkbook(records, bidDate) {
