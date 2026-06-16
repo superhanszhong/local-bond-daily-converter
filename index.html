@@ -182,6 +182,25 @@
       "参考久期", "发行量(亿元)", "相似二级估值", "手续费(%)", "中债5日均值(%)",
       "加点(bp)", "缴款日", "债券全称"
     ];
+    const HEADER_ALIASES = {
+      "招标日": ["招标日", "发行日"],
+      "招标时间": ["招标时间"],
+      "招标场所": ["招标场所", "招标系统"],
+      "债券代码": ["债券代码"],
+      "债券简称": ["债券简称"],
+      "类型": ["类型"],
+      "性质": ["性质"],
+      "期限": ["期限"],
+      "参考久期": ["参考久期"],
+      "发行量(亿元)": ["发行量(亿元)", "发行量(亿)"],
+      "相似二级估值": ["相似二级估值", "相似券二级估值"],
+      "手续费(%)": ["手续费(%)"],
+      "中债5日均值(%)": ["中债5日均值(%)", "中债同期国债(5日)"],
+      "加点(bp)": ["加点(bp)", "投标加点(bp)"],
+      "缴款日": ["缴款日"],
+      "债券全称": ["债券全称"],
+      "区域名称": ["区域名称"]
+    };
     const RATIO_30_REGIONS = new Set(["青岛", "上海", "北京", "浙江", "西藏"]);
     const RATIO_25_REGIONS = new Set(["江苏", "宁波"]);
 
@@ -203,7 +222,7 @@
     function toFloat(value) {
       value = cleanValue(value);
       if (value === null) return null;
-      const n = Number(String(value).replace(/,/g, "").trim());
+      const n = Number(String(value).replace(/,/g, "").replace(/%/g, "").trim());
       return Number.isFinite(n) ? n : null;
     }
 
@@ -277,7 +296,7 @@
       if (direct) return normalizeRegion(String(direct));
       const fullName = String(cleanValue(record["债券全称"]) || "");
       const candidates = [...RATIO_30_REGIONS, ...RATIO_25_REGIONS];
-      return candidates.find((name) => fullName.includes(name)) || "";
+      return candidates.find((name) => fullName.includes(name)) || deriveRegionFromName(fullName);
     }
 
     function normalizeRegion(value) {
@@ -312,7 +331,7 @@
       if (!text) {
         return [cleanValue(nature), cleanValue(fallbackType)].filter(Boolean).join("") + "债";
       }
-      const regionText = String(cleanValue(region) || "").trim();
+      const regionText = String(cleanValue(region) || deriveRegionFromName(text)).trim();
       text = text.replace(/^\d{4}年/, "");
       return text.split("-").map((seg) => {
         seg = seg.replace(/^\d{4}年/, "");
@@ -329,6 +348,13 @@
 
     function escapeRegExp(text) {
       return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function deriveRegionFromName(fullName) {
+      const text = String(fullName || "");
+      const match = text.match(/^\d{4}年([\u4e00-\u9fa5]{2,12}?)(?:省|市|自治区)/);
+      if (!match) return "";
+      return normalizeRegion(match[1]);
     }
 
     function cell(v, extra = {}) {
@@ -415,6 +441,8 @@
         });
         const refYieldCell = ws[encodeCell(r, 19)];
         if (refYieldCell) refYieldCell.z = "0.0000";
+        const durationCell = ws[encodeCell(r, 20)];
+        if (durationCell) durationCell.z = "0.0000";
       }
       for (let r = 3; r <= lastDataRow; r++) {
         ws[encodeCell(r, 4)].z = "m/d;@";
@@ -468,21 +496,19 @@
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: null });
-      const headers = rows[1] || [];
-      const index = {};
-      headers.forEach((h, i) => {
-        if (h !== null && h !== undefined && String(h).trim()) index[String(h).trim()] = i;
-      });
-      const missing = REQUIRED.filter((name) => !(name in index));
+      const { headerRow, index } = detectHeader(rows);
+      const missing = REQUIRED.filter((name) => index[name] === undefined);
       if (missing.length) throw new Error("源文件缺少必要列：" + missing.join("、"));
 
       const records = [];
       let bidDate = null;
-      for (let r = 2; r < rows.length; r++) {
+      for (let r = headerRow + 1; r < rows.length; r++) {
         const row = rows[r];
         if (!cleanValue(row[index["债券代码"]])) continue;
         const rec = {};
-        Object.entries(index).forEach(([name, col]) => rec[name] = row[col]);
+        Object.entries(index).forEach(([name, col]) => {
+          if (col !== undefined) rec[name] = row[col];
+        });
         rec.__sourceOrder = r;
         bidDate = bidDate || toDate(rec["招标日"]);
         records.push(rec);
@@ -493,6 +519,31 @@
         return timeDiff || a.__sourceOrder - b.__sourceOrder;
       });
       return { records, bidDate };
+    }
+
+    function detectHeader(rows) {
+      let best = { headerRow: -1, index: {}, score: -1 };
+      rows.slice(0, 10).forEach((row, rowIndex) => {
+        const normalized = new Map();
+        (row || []).forEach((value, colIndex) => {
+          if (value === null || value === undefined) return;
+          normalized.set(String(value).trim(), colIndex);
+        });
+        const index = {};
+        let score = 0;
+        Object.entries(HEADER_ALIASES).forEach(([canonical, aliases]) => {
+          for (const alias of aliases) {
+            if (normalized.has(alias)) {
+              index[canonical] = normalized.get(alias);
+              score += REQUIRED.includes(canonical) ? 1 : 0;
+              break;
+            }
+          }
+        });
+        if (score > best.score) best = { headerRow: rowIndex, index, score };
+      });
+      if (best.headerRow < 0) throw new Error("未识别到表头");
+      return best;
     }
 
     function bidTimeKey(value) {
