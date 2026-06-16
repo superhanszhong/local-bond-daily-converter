@@ -203,7 +203,7 @@
     function toFloat(value) {
       value = cleanValue(value);
       if (value === null) return null;
-      const n = Number(value);
+      const n = Number(String(value).replace(/,/g, "").trim());
       return Number.isFinite(n) ? n : null;
     }
 
@@ -243,10 +243,26 @@
     function tenorYears(value) {
       value = cleanValue(value);
       if (value === null) return null;
-      const match = String(value).toUpperCase().match(/(\d+(?:\.\d+)?)/);
+      const match = String(value).toUpperCase().trim().match(/^(\d+(?:\.\d+)?)(?:Y)?\s*(\([^)]*\))?/);
       if (!match) return null;
+      if (match[2]) return `${trimYear(match[1])}${match[2]}`;
       const years = Number(match[1]);
       return Number.isInteger(years) ? years : years;
+    }
+
+    function trimYear(value) {
+      const n = Number(value);
+      return Number.isInteger(n) ? String(n) : String(value);
+    }
+
+    function tenorForText(value) {
+      const text = String(value || "");
+      if (!text) return "";
+      return text.includes("(") ? text : `${text}Y`;
+    }
+
+    function tenorExcelFormula(row) {
+      return `G${row}&IF(ISNUMBER(SEARCH("(",G${row}&"")),"","Y")`;
     }
 
     function shortVenue(value) {
@@ -319,6 +335,9 @@
       if (v === null || v === undefined) return { t: "z", ...extra };
       const out = { v, ...extra };
       if (v instanceof Date) out.t = "d";
+      else if (typeof v === "number") out.t = "n";
+      else if (typeof v === "boolean") out.t = "b";
+      else out.t = "s";
       return out;
     }
 
@@ -389,14 +408,16 @@
       applyValueHighlight(ws, 18, 3, lastDataRow, fills.common, fills.different);
       for (let r = 3; r <= maxRow; r++) {
         const dateCell = ws[encodeCell(r, 4)];
-        if (dateCell) dateCell.z = "yyyy-mm-dd";
+        if (dateCell) dateCell.z = "m/d;@";
         [8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 20].forEach((c) => {
           const target = ws[encodeCell(r, c)];
           if (target) target.z = "0.00_);[Red]\\(0.00\\)";
         });
+        const refYieldCell = ws[encodeCell(r, 19)];
+        if (refYieldCell) refYieldCell.z = "0.0000";
       }
       for (let r = 3; r <= lastDataRow; r++) {
-        ws[encodeCell(r, 4)].z = "yyyy-mm-dd";
+        ws[encodeCell(r, 4)].z = "m/d;@";
       }
       for (let r = textStart; r <= maxRow; r++) {
         [1, 5, 9, 14].forEach((c) => {
@@ -545,14 +566,15 @@
         const month = distributeDate instanceof Date ? distributeDate.getMonth() + 1 : "";
         const day = distributeDate instanceof Date ? distributeDate.getDate() : "";
         const typeText = ws[encodeCell(dataRow, 3)]?.v || "";
-        const lineText = `${name}，${tenor}Y，${amount}亿，下限(国债基准${round2(treasury)}+${Math.round(spread * 100)}bp)=${round2(floor)}，${month}月${day}日分销，手续费${fee}`;
+        const tenorText = tenorForText(tenor);
+        const lineText = `${name}，${tenorText}，${amount}亿，下限(国债基准${round2(treasury)}+${Math.round(spread * 100)}bp)=${round2(floor)}，${month}月${day}日分销，手续费${fee}`;
         const titleText = `【${typeText}】`;
         const quoteBp = Number.isFinite(Number(floor)) && Number.isFinite(Number(fee)) ? Math.round((floor - fee) * 100) : "";
-        const quoteText = `${name},${tenor}Y，${amount}亿, ${round2(floor)}%,国债基准+${quoteBp}bp`;
-        set(ws, row, 1, formula(`F${dataRow}&"，"&G${dataRow}&"Y，"&H${dataRow}&"亿，下限(国债基准"&ROUND(Q${dataRow},2)&"+"&RIGHT(L${dataRow}*100,2)&"bp)="&ROUND(M${dataRow},2)&"，"&MONTH(D${dataRow})&"月"&DAY(D${dataRow})&"日"&"分销，手续费"&R${dataRow}`, lineText));
+        const quoteText = `${name},${tenorText}，${amount}亿, ${round2(floor)}%,国债基准+${quoteBp}bp`;
+        set(ws, row, 1, formula(`F${dataRow}&"，"&${tenorExcelFormula(dataRow)}&"，"&H${dataRow}&"亿，下限(国债基准"&ROUND(Q${dataRow},2)&"+"&RIGHT(L${dataRow}*100,2)&"bp)="&ROUND(M${dataRow},2)&"，"&MONTH(D${dataRow})&"月"&DAY(D${dataRow})&"日"&"分销，手续费"&R${dataRow}`, lineText));
         set(ws, row, 5, formula(`"【"&C${dataRow}&"】"`, titleText));
         set(ws, row, 8, formula(`M${dataRow}`, floor));
-        set(ws, row, 9, formula(`F${dataRow}&","&G${dataRow}&"Y，"&H${dataRow}&"亿, "&H${row}&"%"&",国债基准+"&ROUND(H${row}-R${dataRow},2)*100&"bp"`, quoteText));
+        set(ws, row, 9, formula(`F${dataRow}&","&${tenorExcelFormula(dataRow)}&"，"&H${dataRow}&"亿, "&H${row}&"%"&",国债基准+"&ROUND(H${row}-R${dataRow},2)*100&"bp"`, quoteText));
         set(ws, row, 14, formula(`E${row}&A${row}`, titleText + lineText));
       }
 
