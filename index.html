@@ -179,7 +179,7 @@
     };
     const REQUIRED = [
       "招标日", "招标时间", "招标场所", "债券代码", "债券简称", "类型", "性质", "期限",
-      "参考久期", "发行量(亿元)", "相似二级估值", "手续费(%)", "中债5日均值(%)",
+      "参考久期", "发行量(亿元)", "相似二级估值", "手续费(%)", "财政部基准",
       "加点(bp)", "缴款日", "债券全称"
     ];
     const HEADER_ALIASES = {
@@ -195,8 +195,9 @@
       "发行量(亿元)": ["发行量(亿元)", "发行量(亿)"],
       "相似二级估值": ["相似二级估值", "相似券二级估值"],
       "手续费(%)": ["手续费(%)"],
-      "中债5日均值(%)": ["中债5日均值(%)", "中债同期国债(5日)"],
+      "财政部基准": ["财政部5日均值(%)", "财政部同期国债(5日)"],
       "加点(bp)": ["加点(bp)", "投标加点(bp)"],
+      "投标下限": ["投标下限"],
       "缴款日": ["缴款日"],
       "债券全称": ["债券全称"],
       "区域名称": ["区域名称"]
@@ -301,7 +302,7 @@
 
     function normalizeRegion(value) {
       return String(value || "")
-        .replace(/省|市|自治区|壮族|回族|维吾尔/g, "")
+        .replace(/壮族自治区|回族自治区|维吾尔自治区|自治区|省|市|壮族|回族|维吾尔/g, "")
         .trim();
     }
 
@@ -336,9 +337,10 @@
       return text.split("-").map((seg) => {
         seg = seg.replace(/^\d{4}年/, "");
         if (regionText) {
-          seg = seg.replace(new RegExp("^" + escapeRegExp(regionText) + "(省|市|自治区)?"), "");
+          seg = seg.replace(new RegExp("^" + escapeRegExp(regionText) + "(壮族自治区|回族自治区|维吾尔自治区|自治区|省|市)?"), "");
         }
         return seg
+          .replace(/壮族自治区|回族自治区|维吾尔自治区|自治区/g, "")
           .replace(/地方政府/g, "")
           .replace(/政府/g, "")
           .replace(/债券/g, "债")
@@ -596,13 +598,15 @@
         set(ws, row, 11, formula(`ROUNDDOWN(H${row}*0.16,1)`, amount16));
         set(ws, row, 12, (toFloat(rec["加点(bp)"]) || 0) / 100);
         const spread = (toFloat(rec["加点(bp)"]) || 0) / 100;
-        const treasury = toFloat(rec["中债5日均值(%)"]);
-        const floor = treasury === null ? null : treasury + spread;
+        const fiscalBenchmark = toFloat(rec["财政部基准"]);
+        const bidFloor = toFloat(rec["投标下限"]);
+        const treasury = fiscalBenchmark !== null ? fiscalBenchmark : (bidFloor !== null ? bidFloor - spread : null);
+        const floor = fiscalBenchmark !== null ? treasury + spread : bidFloor;
         set(ws, row, 13, formula(`Q${row}+L${row}`, floor));
         set(ws, row, 14, toFloat(rec["相似二级估值"]));
         const comparable = toFloat(rec["相似二级估值"]);
         set(ws, row, 15, formula(`0.1+N${row}`, comparable === null ? null : comparable + 0.1));
-        set(ws, row, 17, toFloat(rec["中债5日均值(%)"]));
+        set(ws, row, 17, treasury);
         set(ws, row, 18, toFloat(rec["手续费(%)"]));
         const fee = toFloat(rec["手续费(%)"]);
         const duration = toFloat(rec["参考久期"]);
