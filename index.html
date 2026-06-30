@@ -441,6 +441,8 @@
           const target = ws[encodeCell(r, c)];
           if (target) target.z = "0.00_);[Red]\\(0.00\\)";
         });
+        const issueAmountCell = ws[encodeCell(r, 8)];
+        if (issueAmountCell) issueAmountCell.z = "0.####";
         const refYieldCell = ws[encodeCell(r, 19)];
         if (refYieldCell) refYieldCell.z = "0.0000";
         const durationCell = ws[encodeCell(r, 20)];
@@ -518,7 +520,9 @@
       if (!records.length) throw new Error("源文件未读取到有效债券明细");
       records.sort((a, b) => {
         const timeDiff = bidTimeKey(a["招标时间"]) - bidTimeKey(b["招标时间"]);
-        return timeDiff || a.__sourceOrder - b.__sourceOrder;
+        const venueDiff = String(shortVenue(a["招标场所"]) || "")
+          .localeCompare(String(shortVenue(b["招标场所"]) || ""), "zh-Hans-CN");
+        return timeDiff || venueDiff || a.__sourceOrder - b.__sourceOrder;
       });
       return { records, bidDate };
     }
