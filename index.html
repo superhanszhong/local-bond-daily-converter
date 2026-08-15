@@ -706,16 +706,15 @@
         const ratio = allocationRatio(rec);
         const amountRatio = issueAmount === null ? null : Math.round(issueAmount * ratio * 10) / 10;
         const amountRest = issueAmount === null || amountRatio === null || ratio !== 0.35 ? null : Math.floor((issueAmount - amountRatio - amountRatio) * 10) / 10;
-        const hotBidLimit = amountRest === null ? null : Math.round((amountRest / 3) * 10) / 10;
+        const hotBidLimit = issueAmount === null ? null : Math.floor((issueAmount / 4) * 10) / 10;
         const amount16 = issueAmount === null ? null : Math.floor(issueAmount * 0.16 * 10) / 10;
         set(ws, row, 9, formula(`ROUND(H${row}*${ratio},1)`, amountRatio));
         if (ratio === 0.35) {
           set(ws, row, 10, formula(`ROUNDDOWN(H${row}-I${row}-I${row},1)`, amountRest));
-          set(ws, row, 11, formula(`ROUND(J${row}/3,1)`, hotBidLimit));
         } else {
           set(ws, row, 10, "-");
-          set(ws, row, 11, "-");
         }
+        set(ws, row, 11, formula(`ROUNDDOWN(H${row}/4,1)`, hotBidLimit));
         set(ws, row, 12, formula(`ROUNDDOWN(H${row}*0.16,1)`, amount16));
         const metrics = bondMetrics(rec);
         set(ws, row, 13, metrics.spread);
