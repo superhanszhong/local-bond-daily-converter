@@ -244,7 +244,7 @@
       "手续费(%)": ["手续费(%)"],
       "财政部基准": ["财政部5日均值(%)", "财政部同期国债(5日)"],
       "加点(bp)": ["加点(bp)", "投标加点(bp)"],
-      "投标下限": ["投标下限"],
+      "投标下限": ["投标下限", "招标下限", "投标下限(%)", "招标下限(%)"],
       "缴款日": ["缴款日"],
       "债券全称": ["债券全称"],
       "区域名称": ["区域名称"]
@@ -617,8 +617,8 @@
       const spread = (toFloat(rec["加点(bp)"]) || 0) / 100;
       const fiscalBenchmark = toFloat(rec["财政部基准"]);
       const bidFloor = toFloat(rec["投标下限"]);
-      const treasury = fiscalBenchmark !== null ? fiscalBenchmark : (bidFloor !== null ? bidFloor - spread : null);
-      const floor = fiscalBenchmark !== null ? treasury + spread : bidFloor;
+      const treasury = bidFloor !== null ? bidFloor - spread : fiscalBenchmark;
+      const floor = bidFloor !== null ? bidFloor : (fiscalBenchmark !== null ? treasury + spread : null);
       const fee = toFloat(rec["手续费(%)"]);
       const duration = toFloat(rec["参考久期"]);
       const reference = floor === null || fee === null || !duration ? null : fee / duration + floor;
